@@ -1,0 +1,6 @@
+Django>=4.2,<5.0
+mysqlclient>=2.2
+pytest
+pytest-django
+bandit>=1.7
+pip-audit>=2.7

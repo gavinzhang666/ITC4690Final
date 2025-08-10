@@ -1,0 +1,84 @@
+name: CI – Tests + SAST + Dependency & Secrets Scan
+
+on:
+  push:
+    branches: [ main, master ]  # Run on push to main/master
+  pull_request:
+    branches: [ main, master ]  # Run on PR to main/master
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  build-test-sec:
+    runs-on: ubuntu-latest  # Use latest Ubuntu runner
+
+    steps:
+      # 1. Checkout the code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Setup Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 3. Install required packages
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 4. Run unit tests with pytest
+      - name: Run pytest
+        run: pytest -q
+
+      # 5. Run Bandit SAST (fail if Medium or higher severity found)
+      - name: Bandit SAST (fails on >= Medium severity)
+        run: |
+          bandit -r . \
+            --severity-level medium \
+            --confidence-level medium \
+            -f sarif -o bandit.sarif
+
+      # Upload Bandit results to GitHub Security tab
+      - name: Upload Bandit SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: bandit.sarif
+
+      # 6. Run pip-audit to check dependencies for known vulnerabilities
+      - name: pip-audit (fails if vulnerable deps found)
+        run: |
+          pip-audit -r requirements.txt -f sarif -o pip-audit.sarif
+
+      # Upload pip-audit results
+      - name: Upload pip-audit SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: pip-audit.sarif
+
+      # 7. Run Gitleaks to detect secrets in code
+      - name: Gitleaks – secrets detection
+        uses: zricethezav/gitleaks-action@v2
+        with:
+          args: detect --no-git -v --redact --report-format sarif --report-path gitleaks.sarif
+
+      # Upload Gitleaks results
+      - name: Upload Gitleaks SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gitleaks.sarif
+
+      # 8. Save all raw reports as build artifacts
+      - name: Upload raw reports as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit.sarif
+            pip-audit.sarif
+            gitleaks.sarif
