@@ -1,4 +1,4 @@
-name: CI + Security Scans + CodeQL (Stable)
+name: CI + Security Scans + CodeQL (Stable Final)
 
 on:
   push:
@@ -62,7 +62,7 @@ jobs:
           name: pip-audit-report
           path: pip-audit.json
 
-      # 7. Install and run Gitleaks CLI
+      # 7. Install and run Gitleaks CLI (allow exit code 0)
       - name: Install Gitleaks
         run: |
           wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz
@@ -70,10 +70,7 @@ jobs:
           sudo mv gitleaks /usr/local/bin/
 
       - name: Run Gitleaks – secrets detection
-        run: |
-          gitleaks detect --no-git -v --redact \
-          --report-format json --report-path gitleaks.json \
-          **--exit-code 0**
+        run: gitleaks detect --no-git -v --redact --report-format json --report-path gitleaks.json --exit-code 0
 
       - name: Upload Gitleaks report
         uses: actions/upload-artifact@v4
