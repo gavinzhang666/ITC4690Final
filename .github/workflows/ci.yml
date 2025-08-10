@@ -1,4 +1,4 @@
-name: CI + Security Scans + CodeQL
+name: CI + Security Scans + CodeQL (Stable)
 
 on:
   push:
@@ -33,14 +33,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install sarif-tools
-
 
       # 4. Run pytest (basic unit test)
       - name: Run pytest
         run: pytest -q
 
-      # 5. Bandit SAST -> JSON -> SARIF
+      # 5. Bandit SAST -> JSON
       - name: Run Bandit (output JSON)
         run: |
           bandit -r . \
@@ -48,47 +46,33 @@ jobs:
             --confidence-level medium \
             -f json -o bandit.json
 
-      - name: Convert Bandit JSON to SARIF
-        run: python -m sarif_tools from-bandit bandit.json bandit.sarif
-
-      - name: Upload Bandit SARIF
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: bandit.sarif
+          name: bandit-report
+          path: bandit.json
 
-      # 6. pip-audit dependency scan
+      # 6. pip-audit dependency scan -> JSON
       - name: pip-audit
-        run: |
-          pip-audit -r requirements.txt -f json -o pip-audit.json
-          python -m sarif_tools from-pip-audit pip-audit.json pip-audit.sarif
+        run: pip-audit -r requirements.txt -f json -o pip-audit.json
 
-      - name: Upload pip-audit SARIF
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload pip-audit report
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: pip-audit.sarif
+          name: pip-audit-report
+          path: pip-audit.json
 
-      # 7. Gitleaks secrets scan
+      # 7. Gitleaks secrets scan -> JSON
       - name: Gitleaks – secrets detection
         uses: zricethezav/gitleaks-action@v2
         with:
           args: detect --no-git -v --redact --report-format json --report-path gitleaks.json
 
-      - name: Convert Gitleaks JSON to SARIF
-        run: python -m sarif_tools from-gitleaks gitleaks.json gitleaks.sarif
-
-      - name: Upload Gitleaks SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: gitleaks.sarif
-
-      # 8. Save all raw reports as artifacts
-      - name: Upload raw reports
+      - name: Upload Gitleaks report
         uses: actions/upload-artifact@v4
         with:
-          name: security-reports
-          path: |
-            *.json
-            *.sarif
+          name: gitleaks-report
+          path: gitleaks.json
 
   codeql-analysis:
     name: CodeQL Analysis
