@@ -62,11 +62,16 @@ jobs:
           name: pip-audit-report
           path: pip-audit.json
 
-      # 7. Gitleaks secrets scan -> JSON
-      - name: Gitleaks – secrets detection
-        uses: zricethezav/gitleaks-action@v2
-        with:
-          args: detect --no-git -v --redact --report-format json --report-path gitleaks.json
+      # 7. Install and run Gitleaks CLI
+      - name: Install Gitleaks
+        run: |
+          wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz
+          tar -xvzf gitleaks_8.18.1_linux_x64.tar.gz
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Run Gitleaks – secrets detection
+        run: |
+          gitleaks detect --no-git -v --redact --report-format json --report-path gitleaks.json
 
       - name: Upload Gitleaks report
         uses: actions/upload-artifact@v4
