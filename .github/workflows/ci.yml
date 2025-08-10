@@ -28,12 +28,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 3. Install dependencies
+      # 3. Install dependencies from requirements.txt
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install sarif-tools
 
       # 4. Run pytest (basic unit test)
       - name: Run pytest
@@ -48,7 +47,7 @@ jobs:
             -f json -o bandit.json
 
       - name: Convert Bandit JSON to SARIF
-        run: sarif-tools from-bandit bandit.json bandit.sarif
+        run: python -m sarif_tools from-bandit bandit.json bandit.sarif
 
       - name: Upload Bandit SARIF
         uses: github/codeql-action/upload-sarif@v3
@@ -59,7 +58,7 @@ jobs:
       - name: pip-audit
         run: |
           pip-audit -r requirements.txt -f json -o pip-audit.json
-          sarif-tools from-pip-audit pip-audit.json pip-audit.sarif
+          python -m sarif_tools from-pip-audit pip-audit.json pip-audit.sarif
 
       - name: Upload pip-audit SARIF
         uses: github/codeql-action/upload-sarif@v3
@@ -73,7 +72,7 @@ jobs:
           args: detect --no-git -v --redact --report-format json --report-path gitleaks.json
 
       - name: Convert Gitleaks JSON to SARIF
-        run: sarif-tools from-gitleaks gitleaks.json gitleaks.sarif
+        run: python -m sarif_tools from-gitleaks gitleaks.json gitleaks.sarif
 
       - name: Upload Gitleaks SARIF
         uses: github/codeql-action/upload-sarif@v3
