@@ -1,10 +1,12 @@
-name: CI – Tests + SAST + Dependency & Secrets Scan
+name: CI + Security Scans + CodeQL
 
 on:
   push:
-    branches: [ main, master ]  # Run on push to main/master
+    branches: [ main, master ]
   pull_request:
-    branches: [ main, master ]  # Run on PR to main/master
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 3 * * 1'  # Weekly Monday run for CodeQL
 
 permissions:
   contents: read
@@ -13,72 +15,105 @@ permissions:
 
 jobs:
   build-test-sec:
-    runs-on: ubuntu-latest  # Use latest Ubuntu runner
+    runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout the code
+      # 1. Checkout code
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Setup Python environment
+      # 2. Setup Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # 3. Install required packages
+      # 3. Install dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install sarif-tools
 
-      # 4. Run unit tests with pytest
+      # 4. Run pytest (basic unit test)
       - name: Run pytest
         run: pytest -q
 
-      # 5. Run Bandit SAST (fail if Medium or higher severity found)
-      - name: Bandit SAST (fails on >= Medium severity)
+      # 5. Bandit SAST -> JSON -> SARIF
+      - name: Run Bandit (output JSON)
         run: |
           bandit -r . \
             --severity-level medium \
             --confidence-level medium \
-            -f sarif -o bandit.sarif
+            -f json -o bandit.json
 
-      # Upload Bandit results to GitHub Security tab
+      - name: Convert Bandit JSON to SARIF
+        run: sarif-tools from-bandit bandit.json bandit.sarif
+
       - name: Upload Bandit SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: bandit.sarif
 
-      # 6. Run pip-audit to check dependencies for known vulnerabilities
-      - name: pip-audit (fails if vulnerable deps found)
+      # 6. pip-audit dependency scan
+      - name: pip-audit
         run: |
-          pip-audit -r requirements.txt -f sarif -o pip-audit.sarif
+          pip-audit -r requirements.txt -f json -o pip-audit.json
+          sarif-tools from-pip-audit pip-audit.json pip-audit.sarif
 
-      # Upload pip-audit results
       - name: Upload pip-audit SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: pip-audit.sarif
 
-      # 7. Run Gitleaks to detect secrets in code
+      # 7. Gitleaks secrets scan
       - name: Gitleaks – secrets detection
         uses: zricethezav/gitleaks-action@v2
         with:
-          args: detect --no-git -v --redact --report-format sarif --report-path gitleaks.sarif
+          args: detect --no-git -v --redact --report-format json --report-path gitleaks.json
 
-      # Upload Gitleaks results
+      - name: Convert Gitleaks JSON to SARIF
+        run: sarif-tools from-gitleaks gitleaks.json gitleaks.sarif
+
       - name: Upload Gitleaks SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: gitleaks.sarif
 
-      # 8. Save all raw reports as build artifacts
-      - name: Upload raw reports as artifact
+      # 8. Save all raw reports as artifacts
+      - name: Upload raw reports
         uses: actions/upload-artifact@v4
         with:
           name: security-reports
           path: |
-            bandit.sarif
-            pip-audit.sarif
-            gitleaks.sarif
+            *.json
+            *.sarif
+
+  codeql-analysis:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'python' ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{matrix.language}}'
